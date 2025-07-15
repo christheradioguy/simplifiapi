@@ -30,6 +30,7 @@ class Client():
             url="https://services.quicken.com/oauth/authorize", json=body)
         data = r.json()
         status = data.get("status")
+
         if (status == "MFA code sent"):
             return {
               "body": body,
@@ -41,7 +42,8 @@ class Client():
             self.access_token = data["accessToken"]
             return {"status": "success"}
 
-        raise RuntimeError("Unexpected login status: " + status)
+        errors = data.get("errors")
+        raise RuntimeError("Unexpected login status: " + errors[0]["detail"])
 
     def finish_login(self, mfa_code: str, body: dict, mfa_channel: str):
         if mfa_code:
@@ -49,7 +51,7 @@ class Client():
               logger.info("Using provided MFA code")
         else:
               mfaCode = input("MFA Code: ")
-        body["mfaChannel"] = mfaChannel
+        body["mfaChannel"] = mfa_channel
         body["mfaCode"] = mfaCode
         r = requests.post(
            url="https://services.quicken.com/oauth/authorize", json=body)

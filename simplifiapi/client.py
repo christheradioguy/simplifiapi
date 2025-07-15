@@ -13,7 +13,7 @@ class Client():
     def __init__(self):
         self.session = requests.Session()
 
-    def get_token(self, email, password):
+    def start_login(self, email, password):
         # Step 1: Oauth authorize
         body = {
             "clientId": "acme_web",
@@ -31,22 +31,39 @@ class Client():
         data = r.json()
         status = data.get("status")
         if (status == "MFA code sent"):
-            mfaChannel = data.get("mfaChannel")
-            logger.warning("MFA Channel: {}".format(mfaChannel))
-            mfaCode = input("MFA Code: ")
-            body["mfaChannel"] = mfaChannel
-            body["mfaCode"] = mfaCode
-            r = requests.post(
-                url="https://services.quicken.com/oauth/authorize", json=body)
-            r.raise_for_status()
-            data = r.json()
-            status = data.get("status")
-            if (status != "User passed MFA"):
-                logger.error("Login failed.")
-                logger.error(r.json())
-                return
-        code = r.json().get("code")
+            return {
+              "body": body,
+              "mfa_channel": data.get("mfaChannel"),
+              "status": status
+            }
 
+        if "accessToken" in data:
+            self.access_token = data["accessToken"]
+            return {"status": "success"}
+
+        raise RuntimeError("Unexpected login status: " + status)
+
+    def finish_login(self, mfa_code: str, body: dict, mfa_channel: str):
+        if mfa_code:
+              mfaCode = mfa_code
+              logger.info("Using provided MFA code")
+        else:
+              mfaCode = input("MFA Code: ")
+        body["mfaChannel"] = mfaChannel
+        body["mfaCode"] = mfaCode
+        r = requests.post(
+           url="https://services.quicken.com/oauth/authorize", json=body)
+        r.raise_for_status()
+        data = r.json()
+        status = data.get("status")
+        if (status != "User passed MFA"):
+            logger.error("Login failed.")
+            logger.error(r.json())
+            return False
+        else:
+            return r.json().get("code")
+    
+    def get_token(self, code):
         # Step 2: Get token
         r = self.session.post(url="https://services.quicken.com/oauth/token",
                               json={
